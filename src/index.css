@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
@@ -10,4 +14,37 @@ body {
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+
+/* override component styles to make sure that the select checkbox is positioned in the left */
+.cs-message-group--outgoing .cs-message__content {
+  background-color: #f3f3f3!important;
+
+}
+.cs-message--outgoing .cs-message__content {
+  background-color: #f3f3f3!important;
+}
+
+.cs-message-group--outgoing {
+  justify-content: space-between!important;
+}
+
+.cs-message-list__scroll-wrapper>.cs-message, 
+.cs-message-list__scroll-wrapper>.cs-message-group {
+  max-width: 100%!important;
+}
+
+.cs-message-group__content {
+  width: 100%!important;
+}
+
+.cs-message__avatar {
+  justify-content: flex-start!important;
+}
+
+/* not working yet */
+.inline-checkbox:checked {
+    background-color: #4ade80!important; /* This is Tailwind's green-400 */
+    border-color: #22c55e!important; /* This is Tailwind's green-500 */
 }
