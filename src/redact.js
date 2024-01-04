@@ -11,9 +11,17 @@ import {
   } from "@chatscope/chat-ui-kit-react";
 import Popover from '@mui/material/Popover';
 import Checkbox from './components/checkbox';
+import MessageWindow from './components/messagewindow';
+import {
+    isSelectionValid, 
+    getAvatar, 
+    convertTimestampToDate,
+    getRedactedMessage
+} from './utils';
 
 const RedactReports = (props) => {
     const [messages, setMessages] = useState([]);
+    const [errorMessage, setErrorMessage] = useState(""); // error message to be displayed on the screen
     const [token, setToken] = useState(null);
     const [reportedData, setReportedData] = useState({
         reportedMessageId: null,
@@ -33,144 +41,112 @@ const RedactReports = (props) => {
         messageId: null
     });
 
+    const updateOneMessage = (messageId, newMessage) => {
+        /* 
+            update the message with id messageId with the new message object newMessage
+        */
+        const updatedMessages = messages.map(message => {
+            if (message.message_id === messageId) {
+                // Create a copy of the message and update its selected field
+                return newMessage;
+            }
+            return message;
+        });
+
+        setMessages(updatedMessages);
+    };
+
     // close the popover when the user clicks outside of it
-    const handleClose = () => {
+    const handlePopoverClose = () => {
         setSelectionData({ ...selectionData, isVisible: false });
     };
 
-    const getNearestHTMLNode = (node) => {
-        while (node && node.nodeType !== Node.ELEMENT_NODE) {
-            node = node.parentNode;
-        }
-        return node;
-    };
-
     const handleContentSelection = (message_id) => {
+        /* pop up the redact overflow tooltip when the user selects a piece of messages */
         const selection = window.getSelection();
-        console.log('selection', selection);
         let selectedText = selection.toString();
         
+        
+        // checks whether the selection is valid
+        if(!isSelectionValid(selection)) return;
         let range = selection.getRangeAt(0);
-        // console.log(getNearestHTMLNode(range.startContainer));
-        // console.log(getNearestHTMLNode(range.endContainer));
-        // console.log(getNearestHTMLNode(range.commonAncestorContainer));
-        // console.log(range.startOffset, range.endOffset);
-        if (selectedText.length > 0) {
-            // make sure the selected text is part of a single message as the selection can span multiple messages
-            let commonAncestorNode= getNearestHTMLNode(range.commonAncestorContainer);
-            if(!commonAncestorNode.classList.contains('text-base')) return;
 
-            // check whether the selected text overlaps with the existing redaction span
-            let startNode = getNearestHTMLNode(range.startContainer);
-            let endNode = getNearestHTMLNode(range.endContainer);
-            if(startNode.classList.contains('redact-span') || endNode.classList.contains('redact-span')) return;
-
-            // calculate the total offset of the selected text within the whole message
-            let totalOffset = range.startOffset;
-            startNode = range.startContainer;
-            while(startNode) {
-                if(startNode.previousSibling){
-                    startNode = startNode.previousSibling;
-                    // check whether it has an attribute length
-                    if(startNode.getAttribute){
-                        totalOffset += parseInt(startNode.getAttribute('originalLength'));
-                    } else {
-                        totalOffset += (startNode.textContent || "").length;
-                    }
-                } else break;
-            }
-
-            setSelectionData({
-                text: selectedText,
-                redactText: selectedText,
-                start: totalOffset,
-                end: totalOffset + selectedText.length,
-                isVisible: true,
-                messageId: message_id,
-            });
-
-            const getBoundingClientRect = () => {
-                return selection.getRangeAt(0).getBoundingClientRect();
-            };
-
-            setAnchorEl({getBoundingClientRect, nodeType: 1});
+        // calculate the total offset of the selected text within the whole original message
+        let totalOffset = range.startOffset;
+        let startNode = range.startContainer;
+        while(startNode) {
+            if(startNode.previousSibling){
+                startNode = startNode.previousSibling;
+                if(startNode.nodeType === Node.ELEMENT_NODE && startNode.getAttribute('originallength')){
+                    // check whether it has an attribute length, which is the length of the original text before redaction
+                    totalOffset += parseInt(startNode.getAttribute('originallength'));
+                } else {
+                    // it is a text node and we need to add its length to the total offset
+                    totalOffset += (startNode.textContent || "").length;
+                }
+            } else break;
         }
+
+        setSelectionData({
+            text: selectedText,
+            redactText: selectedText,
+            start: totalOffset,
+            end: totalOffset + selectedText.length,
+            isVisible: true,
+            messageId: message_id,
+        });
+
+        // required by the popover component
+        const getBoundingClientRect = () => {
+            return selection.getRangeAt(0).getBoundingClientRect();
+        };
+        setAnchorEl({getBoundingClientRect, nodeType: 1});
     };
 
-
     const redactSelectedText = () => {
+        /* 
+            when the user confirms the redaction, replace the selected text with the redact text 
+        */
+
         // first get the replacing text from the div with id redact-tooltip
         const tooltip = document.getElementById('redact-tooltip');
         const redactText = tooltip.textContent;
 
         setSelectionData({ ...selectionData, isVisible: false});
         
-        let selectedMessage = messages.find(message => message.id === selectionData.messageId);
+        let selectedMessage = messages.find(message => message.message_id === selectionData.messageId);
         // if it is a long message, it is possible that there are multiple selections in the same message
         if (!selectedMessage.redaction) selectedMessage.redaction = [];
         selectedMessage.redaction.push({
-            start: selectionData.start,
-            end: selectionData.end,
+            start: selectionData.start, // the start offset of the selected text within the whole original message
+            end: selectionData.end, // the end offset of the selected text within the whole original message, both starts and ends are unique for each message
             originalText: selectionData.text, 
             redactText: redactText
         });
+
+        updateOneMessage(selectionData.messageId, selectedMessage);
     };
 
     const cancelRedactText = (messageId, startPos) => {
-        const updatedMessages = messages.map(message => {
-            if (message.id === messageId) {
-                // Create a copy of the message and update its redaction array
-                return {
-                    ...message,
-                    redaction: message.redaction.filter(redact => redact.start !== startPos),
-                };
-            }
-            return message;
-        });
-    
-        // Update the state with the new array
-        setMessages(updatedMessages);
-        
-        
+        /* 
+            when the user removes a redaction span 
+            @param messageId: the id of the message that contains the redaction span
+            @param startPos: the start offset of the redaction span within the whole original message
+        */
+        let selectedMessage = messages.find(message => message.message_id === messageId);
+        selectedMessage.redaction = selectedMessage.redaction.filter(redact => redact.start !== startPos);
+        updateOneMessage(messageId, selectedMessage);
     };
 
-    const getRedactedMessage = (message, wrapRedactText) => {
-        if (!message.redaction) return [message.content];
-        let redaction = message.redaction;
-        redaction.sort((a, b) => a.start - b.start);
-
-        let originalMessage = message.content;
-        let elements = [];
-        let lastIndex = 0;
-        
-        redaction.forEach(redact => {
-            elements.push(originalMessage.substring(lastIndex, redact.start));
-            elements.push(wrapRedactText(redact));
-            lastIndex = redact.end;
-        });
-
-        // Append the remaining part of the original string
-        elements.push(originalMessage.substring(lastIndex));
-        return elements;
-    };
-
-    const getAvatar = (author) => {
-        return (author.avatarURL ? author.avatarURL : (author.bot ? "bot_avatar.png" : "user_avatar.png"));
-    };
-
-    const convertTimestampToDate = (timestamp) => {
-        return  new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
-    };
 
     const displayRedactedMessage = (message) => {
-        // build a JSX element that represents the redacted message
+        /* build a JSX element that represents the redacted message with a small tick at the top right for canceling redaction */
         let redactedMessage = getRedactedMessage(message, (redact) => {
                
-               return (<span className="relative inline-block redact-span" originalLength={redact.originalText.length}>
+               return (<span className="relative inline-block redact-span" originallength={redact.originalText.length}>
                     <span className="bg-blue-50 p-1 font-bold rounded redact-span">{redact.redactText}</span>
                     <button
-                        onClick={() => cancelRedactText(message.id, redact.start)}
+                        onClick={() => cancelRedactText(message.message_id, redact.start)}
                         className="absolute top-0 right-0 transform translate-x-1/2 -translate-y-1/2 bg-white rounded-full text-xs w-4 h-4 flex items-center justify-center border border-gray-300"
                     >
                         &times;
@@ -181,8 +157,49 @@ const RedactReports = (props) => {
         return <p className="text-base">{redactedMessage}</p>;
     };
 
+    const handleMessageSelection = (messageId, check) => {
+        /* 
+            when the user selects or deselects a message in the message list, 
+            We treat this as a special case of redaction, where the whole message is selected and replaced by a string of white spaces to indicate its length.
+            @param message_id: the id of the message that is targeted
+            @param check: whether the message is selected or deselected
+        */
+        // distinguish between two kinds of message ids =<message_id> and =<message_id>-<index>
+        if(!messageId.includes('-')){
+            // if the message is a text message
+            let selectedMessage = messages.find(message => message.message_id === messageId);
+            if(!selectedMessage) return;
+
+            selectedMessage.selected = check;
+            if(!check) {
+                if(!selectedMessage.redaction) selectedMessage.redaction = [];
+                selectedMessage.redaction.push({
+                    start: 0,
+                    end: selectedMessage.content.length,
+                    originalText: selectedMessage.content,
+                    redactText: ' '.repeat(selectedMessage.content.length)
+                });
+            } else {
+                selectedMessage.redaction = selectedMessage.redaction.filter(redact => (redact.start !== 0 || redact.end !== selectedMessage.content.length));
+            }
+            updateOneMessage(messageId, selectedMessage);
+        } else {
+            // if the message is an attachment message
+            let [textMessageId, attachIndex] = messageId.split('-');
+            let selectedMessage = messages.find(message => message.message_id === textMessageId);
+            if(!selectedMessage) return;
+
+            
+            selectedMessage.attachments[attachIndex].selected = check;
+            console.log("updated attachment", selectedMessage.attachments[attachIndex]);
+            updateOneMessage(textMessageId, selectedMessage);
+        }
+    };
+
 
     useEffect(() => {
+        /* fetch reporting data and message windows from the backend */
+
         const queryParams = new URLSearchParams(window.location.search);
         const token = queryParams.get('token');
         setToken(token);
@@ -202,17 +219,24 @@ const RedactReports = (props) => {
                         },
                     }
                 );
-                const jsonData = await response.json();
-                console.log('jsonData', jsonData);
-                setMessages(jsonData.messages);
-                setReportedData({
-                    reportedMessageId: jsonData.message_id,
-                    reportedUserId: jsonData.reported_user_id,
-                    reportingUserId: jsonData.reporting_user_id,
-                    reportTimestamp: jsonData.reporting_timestamp,
-                    channelId: jsonData.channel_id,
-                    token: token
-                });
+                if(!response.ok) {
+                    let error = await response.json();
+                    console.log('error', error);
+                    setErrorMessage(error.error);
+                } else {
+                    const jsonData = await response.json();
+                    console.log('jsonData', jsonData);
+                    console.log('jsonData.message_window.messages', jsonData.message_window.messages);
+                    setMessages(jsonData.message_window.messages);
+                    setReportedData({
+                        reportedUserId: jsonData.reported_user_id,
+                        reportingUserId: jsonData.reporting_user_id,
+                        reportTimestamp: jsonData.reporting_timestamp,
+                        reportedMessageId: jsonData.message_window.message_id,
+                        channelId: jsonData.message_window.channel_id,
+                        token: token
+                    });
+                }
 
             } catch (error) {
                 console.error('Error fetching data:', error);
@@ -229,7 +253,11 @@ const RedactReports = (props) => {
         let redactedMessages = messages.map(
             message => {
                 let messagePieces = getRedactedMessage(message, (redact) => `<redact>${redact.redactText}</redact>`);
-                return messagePieces.join('');
+                return {
+                    message_id: message.message_id,
+                    content: messagePieces.join(''),
+                    attachments: message.attachments,
+                }
             }
         );
 
@@ -250,112 +278,49 @@ const RedactReports = (props) => {
         );
         
     };
-
-    // const convertTimestampToDate = (timestamp) => {
-    //     return  new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    // };
-
-    // const getAvatar = (author) => {
-    //     return (author.avatarURL ? author.avatarURL : (author.bot ? "bot_avatar.png" : "user_avatar.png"));
-    // };
     
     if(messages.length > 0) {
         // group messages by author into an array of arrays, where each array contains sequential messages from the same author
-        const groupedMessages = messages.reduce((acc, message) => {
-            const lastMessage = acc[acc.length - 1];
-            if(lastMessage && lastMessage[0].author.username === message.author.username) {
-                lastMessage.push(message);
-            } else {
-                acc.push([message]);
-            }
-            return acc;
-        }, []);
-
-
         return (
-            <div className='flex flex-col overflow-hidden w-7/12 h-full m-4 p-2 rounded-xl gap-y-4'>
-                <div className='h-5/6 border rounded-xl p-2 border-gray-300'>
-                    <MessageList>
-                        {
-                            groupedMessages.map((messageGroup, index) => {
-                                let author = messageGroup[0].author;
-                                let firstMessageTime = convertTimestampToDate(messageGroup[0].timestamp);
-                                
-                                return (
-                                    <MessageGroup 
-                                        direction={author.id === reportedData.reportingUserId ? 'outgoing' : 'incoming'}
-                                        sender={author.id} 
-                                        sentTime={firstMessageTime}
-                                        key={`messageGroup-${messageGroup[0].id}`}
-                                    > 
-                                        <MessageGroup.Messages>
-                                            {
-                                                messageGroup.map((message, index) => {
-                                                        return (
-                                                            <div className='flex justify-between items-center gap-x-4'>
-                                                                <Checkbox 
-                                                                    isReportedMessage={reportedData.reportedMessageId === message.id}
-                                                                    selectMessage={(check) => {
-                                                                        message.selected = check;
-                                                                    }} 
-                                                                    
-                                                                    selected={true} />
-                                                                <Message
-                                                                    key={`message-${message.id}`}
-                                                                    id={`message-${message.id}`}
-                                                                    model={{
-                                                                        type: "custom",
-                                                                        sentTime: convertTimestampToDate(message.timestamp),
-                                                                        sender: message.author.id,
-                                                                        direction: message.author.id === reportedData.reportingUserId ? 'outgoing' : 'incoming',
-                                                                        position: "first",
-                                                                    }}
-                                                                    onMouseUp={() => handleContentSelection(message.id)}
-                                                                    avatarSpacer={index !== 0}
-                                                                >
-                                                                    {index === 0 && (
-                                                                        <Avatar src={getAvatar(author)} name={message.author.id} className='border border-gray-200'/>
-                                                                    )}
-                                                                    <Message.CustomContent>
-                                                                        {displayRedactedMessage(message)}
-                                                                    </Message.CustomContent>
-                                                                </Message>
-                                                            </div>
-                                                        );
-                                                    })
-                                            }
-                                        </MessageGroup.Messages>
-                                    </MessageGroup>);
-                            })
-                        }
-                    </MessageList>
-                    <Popover
-                        open={selectionData.isVisible}
-                        anchorEl={anchorEl}
-                        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
-                        onClose={handleClose}
-                    >
-                        <div className='flex p-2 rounded-xl items-center gap-x-2 h-fit'>
-                            <div className='flex-grow-0 text-base'>
-                                Redact with
-                            </div>
-                            <div contentEditable 
-                                className=' text-gray-600 text-lg focus:outline-none bg-blue-50 rounded min-w-[120px] max-w-[360px] flex-grow px-2 py-1'
-                                id='redact-tooltip'
-                                suppressContentEditableWarning={true}
-                            >
-                                {selectionData.text}
-                            </div>
-                            <button 
-                                className='bg-blue-400 hover:bg-blue-500 text-white py-1 px-2 rounded flex-grow-0'
-                                onClick={redactSelectedText}
-                            >
-                                Confirm
-                            </button>
+            <div className='flex flex-col overflow-hidden w-6/12 h-full p-2 mx-4 rounded-xl gap-y-4'>
+                <MessageWindow
+                    messages={messages}
+                    reportedData={{
+                        reportingUserId: reportedData.reportingUserId,
+                        reportedMessageId: reportedData.reportedMessageId
+                    }}
+                    timeFormat="datetime"
+                    enableCheckBox={true}
+                    handleContentSelection={handleContentSelection}
+                    handleMessageSelection={handleMessageSelection}
+                    displayMessage={displayRedactedMessage}
+                />
+                <Popover
+                    open={selectionData.isVisible}
+                    anchorEl={anchorEl}
+                    anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
+                    onClose={handlePopoverClose}
+                >
+                    <div className='flex p-2 rounded-xl items-center gap-x-2 h-fit'>
+                        <div className='flex-grow-0 text-base'>
+                            Redact with
                         </div>
-                    </Popover>
-                </div>
-                <div className='flex-grow-0 self-end'>
+                        <div contentEditable 
+                            className=' text-gray-600 text-lg focus:outline-none bg-blue-50 rounded min-w-[120px] max-w-[360px] flex-grow px-2 py-1'
+                            id='redact-tooltip'
+                            suppressContentEditableWarning={true}
+                        >
+                            {selectionData.text}
+                        </div>
+                        <button 
+                            className='bg-blue-400 hover:bg-blue-500 text-white py-1 px-2 rounded flex-grow-0'
+                            onClick={redactSelectedText}
+                        >
+                            Confirm
+                        </button>
+                    </div>
+                </Popover>
+                <div className='flex-grow-0 self-end mx-4'>
                     <button 
                         onClick={reportOnDiscord}
                         className='bg-blue-400 hover:bg-blue-500 text-white py-1 px-2 rounded flex-grow-0'
@@ -365,7 +330,16 @@ const RedactReports = (props) => {
                 </div>
             </div>
         );
-    }
+    } else if(errorMessage.length > 0) {
+        return (
+            <div class="bg-gray-100 flex justify-center items-center h-screen">
+                <div class="bg-white p-6 rounded-lg shadow-lg text-center">
+                    <h2 class="text-red-500 text-3xl font-bold mb-2">Error Occurred</h2>
+                    <p class="text-gray-700 text-xl">{errorMessage}</p>
+                </div>
+            </div>
+        );
+    }   
 };
 
 export default RedactReports;

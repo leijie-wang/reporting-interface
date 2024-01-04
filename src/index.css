@@ -48,3 +48,10 @@ code {
     background-color: #4ade80!important; /* This is Tailwind's green-400 */
     border-color: #22c55e!important; /* This is Tailwind's green-500 */
 }
+
+.blurred-image {
+    overflow: hidden;
+}
+.blurred-image img {
+    filter: blur(10px);
+}
