@@ -1,21 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import styles from "@chatscope/chat-ui-kit-styles/dist/default/styles.min.css";
 import './index.css';
-import {
-    MessageList,
-    Message,
-    MessageGroup,
-    MessageInput,
-    Avatar,
-
-  } from "@chatscope/chat-ui-kit-react";
 import Popover from '@mui/material/Popover';
-import Checkbox from './components/checkbox';
 import MessageWindow from './components/messagewindow';
 import {
     isSelectionValid, 
-    getAvatar, 
-    convertTimestampToDate,
     getRedactedMessage
 } from './utils';
 
@@ -138,7 +126,6 @@ const RedactReports = (props) => {
         updateOneMessage(messageId, selectedMessage);
     };
 
-
     const displayRedactedMessage = (message) => {
         /* build a JSX element that represents the redacted message with a small tick at the top right for canceling redaction */
         let redactedMessage = getRedactedMessage(message, (redact) => {
@@ -196,7 +183,6 @@ const RedactReports = (props) => {
         }
     };
 
-
     useEffect(() => {
         /* fetch reporting data and message windows from the backend */
 
@@ -246,6 +232,51 @@ const RedactReports = (props) => {
         fetchData();
     }, []);
 
+    const expandMessageWindow = async (direction) => {
+        /* 
+            expand the message window to before or after the current message window
+            @param direction: 'before' or 'after'
+        */
+        let message_id = direction === 'before' ? messages[0].message_id : messages[messages.length - 1].message_id;
+        try {
+                // not sure why fetching data from the ngrok proxy does not work
+            const response = await fetch(
+                `http://localhost:3000/react/expand-window?token=${token}&direction=${direction}&message_id=${message_id}`,
+                {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json, text/plain, */*',
+                        'Access-Control-Allow-Origin':'*'
+                    },
+                }
+            );
+            if(!response.ok) {
+                let error = await response.json();
+                console.log('error', error);
+                setErrorMessage(error.error);
+            } else {
+                const jsonData = await response.json();
+                console.log('jsonData', jsonData);
+                // add a new field to each message object that indicates whether it is a new message or not
+                let expandedMessages = jsonData.expanded_messages.map(message => {
+                    message.new = true;
+                    return message;
+                });
+
+                messages.forEach(message => message.new = false);
+                if(direction === 'before') {
+                    setMessages(jsonData.expanded_messages.concat(messages));
+                } else {
+                    setMessages(messages.concat(jsonData.expanded_messages));
+                }
+            }
+
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        }
+    };
 
     const reportOnDiscord = async () => {   
         // send a POST request to the server to report the message on Discord
@@ -283,6 +314,8 @@ const RedactReports = (props) => {
         // group messages by author into an array of arrays, where each array contains sequential messages from the same author
         return (
             <div className='flex flex-col overflow-hidden w-6/12 h-full p-2 mx-4 rounded-xl gap-y-4'>
+
+                
                 <MessageWindow
                     messages={messages}
                     reportedData={{
@@ -291,10 +324,14 @@ const RedactReports = (props) => {
                     }}
                     timeFormat="datetime"
                     enableCheckBox={true}
+                    enbaleExpandMore={true}
                     handleContentSelection={handleContentSelection}
                     handleMessageSelection={handleMessageSelection}
                     displayMessage={displayRedactedMessage}
+                    expandMessageWindow={expandMessageWindow}
                 />
+                
+                
                 <Popover
                     open={selectionData.isVisible}
                     anchorEl={anchorEl}
@@ -315,7 +352,7 @@ const RedactReports = (props) => {
                         <button 
                             className='bg-blue-400 hover:bg-blue-500 text-white py-1 px-2 rounded flex-grow-0'
                             onClick={redactSelectedText}
-                        >
+                        > 
                             Confirm
                         </button>
                     </div>

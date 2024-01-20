@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import Checkbox from './checkbox';
 import styles from "@chatscope/chat-ui-kit-styles/dist/default/styles.min.css";
 import '../index.css';
@@ -6,7 +6,7 @@ import {
     MessageList,
     Message,
     MessageGroup,
-    MessageInput,
+    MessageSeparator,
     Avatar
   } from "@chatscope/chat-ui-kit-react";
 
@@ -17,21 +17,28 @@ const getAvatar = (author) => {
 };
 
 function MessageWindow(props) {
-    const { messages, reportedData, timeFormat, enableCheckBox, handleContentSelection, handleMessageSelection, displayMessage} = props;
-    
+    const { messages, reportedData, timeFormat, enableCheckBox, enbaleExpandMore, handleContentSelection, handleMessageSelection, displayMessage, expandMessageWindow} = props;
+
+
     /* while the discord treats messages with images as a single message, the message library treats each image as a separate message,
         so we need to expand them into more messages */
 
     const expanededMessages = messages.reduce((acc, message) => {
         // Add the original message first
         let attachments = message.attachments;
-        message.type = 'text';
-        // delete its attributes but still keep access to attachments
-
-        acc.push(message);
+        
+        if(message.content.length > 0){
+            /* 
+                in discord people cannot send empty messages unless there is an image attached
+                In such cases, the message content is empty and the image is in the attachment
+            */
+            message.type = 'text';
+            acc.push(message);
+        }
     
         // If the message has attachments, expand them into new messages
         if (attachments && attachments.length > 0) {
+            // console.log("attachments found", message);
             attachments.forEach((attachment, index) => {
                 const attachmentMessage = {
                     ...message, // Copy the original message
@@ -52,9 +59,10 @@ function MessageWindow(props) {
     
 
     const groupedMessages = expanededMessages.reduce((acc, message) => {
-        const lastMessage = acc[acc.length - 1];
-        if(lastMessage && lastMessage[0].author.username === message.author.username) {
-            lastMessage.push(message);
+        const lastMessageGroup = acc[acc.length - 1];
+        // start a new group when the author or new status changes; for the latter, we want to add a separator there
+        if(lastMessageGroup && lastMessageGroup[0].author.username === message.author.username && lastMessageGroup[0].new === message.new) {
+            lastMessageGroup.push(message);
         } else {
             acc.push([message]);
         }
@@ -69,9 +77,20 @@ function MessageWindow(props) {
         }
     };
 
+
     return (
-        <div className='flex-grow-1 flex flex-col rounded-lg p-2 border border-gray-300 overflow-y-auto'>
+        <div className='flex-grow-1 flex flex-col rounded-2xl p-2 border border-gray-300 bg-gray-100 overflow-y-auto'>
+
             <MessageList>
+                {enbaleExpandMore && 
+                    (<MessageSeparator>
+                        < button onClick={() => expandMessageWindow("before")} 
+                            className='bg-blue-50 py-1 px-2 rounded'
+                            >
+                            Expand More
+                        </button>
+                    </MessageSeparator>)
+                }
                 {
                     groupedMessages.map((messageGroup, index) => {
                         let author = messageGroup[0].author;
@@ -79,25 +98,36 @@ function MessageWindow(props) {
                         if(groupedMessages.filter(i => i[0].message_id === messageGroup[0].message_id).length > 1){
                             console.log("dupicate key found", messageGroup[0].message_id);
                         }
-                        return (
+                        let elementArrays = [];
+                        if(enbaleExpandMore && groupedMessages[index-1] && groupedMessages[index-1][0].new !== messageGroup[0].new){
+                            elementArrays.push(
+                                <MessageSeparator>
+                                    <div className='flex justify-center items-center gap-x-2 text-red-500 font-medium'>New {messageGroup[0].new ? "Below" : "Above"}</div>
+                                </MessageSeparator>
+                            );
+                        }
+                        elementArrays.push(
                             <MessageGroup 
                                 direction={author.id === reportedData.reportingUserId ? 'outgoing' : 'incoming'}
                                 sender={author.id} 
                                 sentTime={firstMessageTime}
                                 key={`messageGroup-${messageGroup[0].message_id}`}
                             > 
+                                <MessageGroup.Header>{convertTimestampToDate(messageGroup[0].timestamp)}</MessageGroup.Header>
                                 <MessageGroup.Messages>
                                     {
                                         messageGroup.map((message, index) => {
                                             return (
-                                                <div className='flex justify-between items-center gap-x-4'>
-                                                    <Checkbox 
-                                                        isReportedMessage={reportedData.reportedMessageId === message.message_id}
-                                                        selectMessage={(check) => {
-                                                            handleMessageSelection(message.message_id, check);
-                                                        }} 
-                                                        selected={true} 
-                                                    />
+                                                <div className='flex justify-between items-center gap-x-4 my-1'>
+                                                    { enableCheckBox &&
+                                                        (<Checkbox 
+                                                            isReportedMessage={reportedData.reportedMessageId === message.message_id}
+                                                            selectMessage={(check) => {
+                                                                handleMessageSelection(message.message_id, check);
+                                                            }} 
+                                                            selected={true} 
+                                                        />)
+                                                    }
                                                     <Message
                                                         key={`message-${message.message_id}`}
                                                         model={{
@@ -134,8 +164,18 @@ function MessageWindow(props) {
                                     }
                                 </MessageGroup.Messages>
                             </MessageGroup>);
+                            return elementArrays;
                     })
                 }
+                {enbaleExpandMore && (
+                    <MessageSeparator>
+                        < button onClick={() => expandMessageWindow("after")} 
+                            className='bg-blue-50 py-1 px-2 rounded'
+                            >
+                            Expand More
+                        </button>
+                    </MessageSeparator>
+                )}
             </MessageList>
         </div>
     );

@@ -30,6 +30,17 @@ code {
   justify-content: space-between!important;
 }
 
+/* for the background of the outgoing message */
+.cs-message--outgoing .cs-message__content {
+  background-color: white!important;
+}
+
+/* put the time of the message in the center */
+.cs-message-group__header {
+    justify-content: center;
+    align-items: center;
+}
+
 .cs-message-list__scroll-wrapper>.cs-message, 
 .cs-message-list__scroll-wrapper>.cs-message-group {
   max-width: 100%!important;
@@ -41,6 +52,11 @@ code {
 
 .cs-message__avatar {
   justify-content: flex-start!important;
+}
+
+/* add a background color to the message list gray-100*/
+.cs-message-list {
+  background-color: #f3f4f6!important;
 }
 
 /* not working yet */

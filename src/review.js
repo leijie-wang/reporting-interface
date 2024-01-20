@@ -1,27 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import MessageWindow from './components/messagewindow';
 import './index.css';
-import { main } from '@popperjs/core';
-
-const convertTimestampToDate = (timeString) => {
-    return  new Date(timeString).toLocaleDateString([], { year: 'numeric', month: '2-digit', day: '2-digit'});
-};
-
+import MessageWindow from './components/messagewindow';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faArrowLeft, faArrowRight } from '@fortawesome/free-solid-svg-icons';
 
 const ReviewReports = (props) => {
-    const [reports, setReports] = useState([]);
-    const [currentReport, setCurrentReport] = useState(null);
-    const [reviewDecision, setReviewDecision] = useState(null);
-    const [interactionOption, setInteractionOption] = useState(null);
-    const [uncoverRedactedMessage, setUncoverRedactedMessage] = useState([]);
+    const [messageWindows, setMessageWindows] = useState([]);
+    const [errorMessage, setErrorMessage] = useState(""); // error message to be displayed on the screen
+    const [token, setToken] = useState(null);
+    const [reportedData, setReportedData] = useState({
+        reportedUserId: null,
+        reportingUserId: null,
+        reportTimestamp: null,
+    });
 
+    const [currentMessageWindow, setCurrentMessageWindow] = useState(0);
+    const totalMessageWindows = messageWindows.length;
+    
     useEffect(() => {
+        /* fetch reporting data and message windows from the backend */
+
+        const queryParams = new URLSearchParams(window.location.search);
+        const token = queryParams.get('token');
+        setToken(token);
 
         const fetchData = async () => {
             try {
                 // not sure why fetching data from the ngrok proxy does not work
                 const response = await fetch(
-                    `http://localhost:3000/react/review-reports`,
+                    `http://localhost:3000/react/review-report?token=${token}`,
                     {
                         method: 'GET',
                         mode: 'cors',
@@ -32,19 +39,22 @@ const ReviewReports = (props) => {
                         },
                     }
                 );
-                const jsonData = await response.json();
-                // setReports(jsonData);
-                let fakeReports = Array(6).fill(jsonData).flatMap(x => x.map(report => ({ ...report })));
-                fakeReports.forEach((report, index) => {
-                    // generate a random time string between 2023 and 2024 for each like "2023-12-08T03:42:11.679Z"
-                    report.reporting_timestamp = new Date(1672521731679 + Math.floor(Math.random() * 31536000000)).toISOString();
-                    // generate a random string from the list ["resolved", "pending", "waiting"]
-                    report.reviewing_status = ["resolved", "pending", "waiting"][Math.floor(Math.random() * 3)];
-                });
-                // sort reports by timestamp
-                fakeReports.sort((a, b) => new Date(b.reporting_timestamp) - new Date(a.reporting_timestamp));
-                setReports(fakeReports);
-                console.log(jsonData);
+                if(!response.ok) {
+                    let error = await response.json();
+                    console.log('error', error);
+                    setErrorMessage(error.error);
+                } else {
+                    const jsonData = await response.json();
+                    console.log('jsonData', jsonData);
+                    // console.log('jsonData.message_window.messages', jsonData.message_window.messages);
+                    setMessageWindows(jsonData.message_windows);
+                    setReportedData({
+                        reportedUserId: jsonData.reported_user_id,
+                        reportingUserId: jsonData.reporting_user_id,
+                        reportTimestamp: jsonData.reporting_timestamp,
+                    });
+                }
+
             } catch (error) {
                 console.error('Error fetching data:', error);
             }
@@ -53,198 +63,85 @@ const ReviewReports = (props) => {
         fetchData();
     }, []);
 
-    const handleReviewDecision = (event) => {
-        setReviewDecision(event.target.value);
-      };
-    
-    const handleUncoverRedactedMessage = (event, messageId, redactedPiece) => {
-        if (event.target.checked) {
-            setUncoverRedactedMessage([...uncoverRedactedMessage, {
-                messageId: messageId,
-                redactedPiece: redactedPiece
-            }]);
-        } else {
-            setUncoverRedactedMessage(uncoverRedactedMessage.filter((item) => (item.messageId !== messageId && item.redactedPiece !== redactedPiece)));
-        }
-    };
-
     const displayRedactedMessage = (message) => {
-        // find patterns like <redact>random strings</redact> in the message.content
-        let pattern = /<redact>|<\/redact>/;
-        const elements = message.content.split(pattern).map((piece, index) => {
-            // every odd piece of text is enclosed in redact tags
-            if (index % 2 === 1) {
-                return (
-                    <span className="inline-flex items-center gap-x-1 bg-blue-50 p-1 rounded">
-                        <span className="font-bold">{piece}</span>
-                        <input type="checkbox" 
-                            onClick={(event) => handleUncoverRedactedMessage(event, message.id, piece)}
-                            className="inline-checkbox rounded-full text-xs w-4 h-4 flex items-center justify-center border border-gray-300" />
-                    </span>
-                );
-            } else return piece;
-        });
-        return elements;
-    };
+        /* build a JSX element that represents the redacted message with a blue background for each redacted text */
 
-    const sentReviewDecision = () => {
-        let decision = {
-            reviewDecision: reviewDecision,
-            interactionOption: interactionOption,
-            uncoverRedactedMessage: uncoverRedactedMessage
-        };
-        currentReport.reviewing_status = (["dismiss", "remove"].includes(reviewDecision) ? "resolved" : "pending");
-        currentReport.review_decision = reviewDecision;
-        return;
+        let redactedMessage = "";
+        // replace each pair of <redact></redact> tags with a span with a blue background
+        if(message.type === "text"){
+            // Split the message at <redact> and </redact>, keeping the content between them
+            const parts = message.content.split(/<redact>(.*?)<\/redact>/);
 
-    };
-    return (
-        <div className='flex flex-col h-full items-stretch my-2 p-2 rounded-xl gap-y-4 overflow-hidden'>
-            <div className="header flex-grow-0 self-center">
-                <div className="text-3xl text-gray-700 font-bold"></div>
-            </div>
-            <div className="body h-1 flex-grow flex gap-x-4">
-                <div className="review-list w-[27%] flex flex-col items-stretch gap-y-2 py-4 px-2 rounded border border-gray-400">
-                    <div className="flex-grow-0 text-lg font-bold text-gray-700">Review List</div>
-                    <div className="flex flex-col flex-grow gap-y-2 overflow-y-auto h-1">
-                        {
-                            reports.map((report, index) => {
-                                let mainColor = "";
-                                if (report.reviewing_status === "resolved") {
-                                    mainColor = "blue";
-                                } else if (report.reviewing_status === "pending") {
-                                    mainColor = "orange";
-                                } else if (report.reviewing_status === "waiting") {
-                                    mainColor = "rose";
-                                }
-                                return (
-                                    <div   
-                                        className={`flex flex-col border border-gray-10 rounded p-2` + (
-                                            mainColor === "blue" ? " bg-blue-100" : mainColor === "orange" ? " bg-orange-100" : " bg-rose-100"
-                                        ) + (currentReport === report ? " ring-4 ring-gray-200 " : " bg-opacity-80")}
-                                        key={index}
-                                        onClick={() => {setCurrentReport(report)}}
-                                    >
-                                        <div className="flex-grow-0 text-sm text-gray-500">{convertTimestampToDate(report.reporting_timestamp)}</div>
-                                        <div className="">{report.report_reason}</div>
-                                    </div>
-                                );
-                            })
+            return (
+                <p className="text-base">
+                    {parts.map((part, index) => {
+                        // Every even index is normal text, odd indexes are redacted text
+                        if (index % 2 === 0) {
+                            return part;
+                        } else {
+                            return <span key={index} className="bg-blue-50 p-1 m-1 font-bold rounded">{part}</span>;
                         }
-                    </div>
-                </div>
-                <div className="review-panel w-[70%] flex-grow flex flex-col gap-y-4 items-stretch py-4 px-2 rounded border border-gray-400 divide-dashed divide-y divide-gray-400">
-                    {
-                        currentReport && (
-                            <div className="report-decision h-[25%] flex flex-col gap-y-6 px-4">
-                                <div className="flex-grow-0 flex gap-x-4 items-center">
-                                    <div className="text-lg font-bold">Moderation Decisions</div>
-                                    <div>
-                                        <select id="options-select"
-                                            className="bg-gray-50 border text-gray-900 text-lg focus:ring-blue-500 focus:border-blue-500 w-full p-2.5"
-                                            value={reviewDecision}
-                                            onChange={handleReviewDecision}
-                                        >
-                                            <option value="">What is your moderation decision?</option>
-                                            <option value="dismiss">Dimiss</option>
-                                            <option value="remove">Remove content</option>
-                                            <option value="request">Ask for more information</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <button 
-                                            className={`bg-blue-500 text-white font-bold py-2 px-4 rounded ${reviewDecision === null ? "hidden" : ""}`}
-                                            onClick={() => {sentReviewDecision()}}
-                                        >
-                                            Submit
-                                        </button>
-                                    </div>
-                                </div>
-                                { reviewDecision === "request" && (
-                                    <div className="flex-grow h-1 flex flex-col gap-x-4 items-start">
-                                        
-                                        <div className="text-lg">To ask for more information, you may ask the reporting person to ... </div>
-                                        <div className="flex gap-2 p-4 w-[75%]">
-                                            <div className="flex items-center">
-                                                <input type="radio" id="uncover-option" 
-                                                    value="uncover-option" className="w-4 h-4" 
-                                                    checked={interactionOption === 'uncover-option'}
-                                                    onChange={() => setInteractionOption('uncover-option')}
-                                                />
-                                                <label htmlFor="uncover-option" className="ml-2">Uncover all selected redacted messages</label>
-                                            </div>
-                                            <div className="flex items-center">
-                                                <input type="radio" id="witness-option" 
-                                                    value="witness-option" className="w-4 h-4" 
-                                                    checked={interactionOption === 'witness-option'}
-                                                    onChange={() =>  setInteractionOption('witness-option')}
-                                                />
-                                                <label htmlFor="witness-option" className="ml-2">Involve a random witness from the group chat</label>
-                                            </div>
-                                            <div className="flex items-center">
-                                                <input type="radio" id="defend-option" 
-                                                    value="defend-option" className="w-4 h-4" 
-                                                    checked={interactionOption === 'defend-option'}
-                                                    onChange={() => setInteractionOption('defend-option')}
-                                                />
-                                                <label htmlFor="defend-option" className="ml-2">Involve the reported person to defend themselves</label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )
-                    }
-                    {
-                        currentReport &&
-                            (<div className="report-details h-[75%] flex gap-x-4 justify-between px-4 items-stretch py-2">
-                                <div className="report-summary w-[45%] h-full flex flex-col gap-y-2 items-stretch">
-                                    <div class="header flex-grow-0 text-lg font-bold text-gray-700">Reporting Summary</div>
-                                    <div class="body flex-grow flex flex-col rounded-lg p-2 border border-gray-300 h-full gap-y-2  bg-gray-50">
-                                        <div className="text-sm italic text-gray-500 px-4">
-                                            Reported on {convertTimestampToDate(currentReport.reporting_timestamp)}
-                                        </div>
-                                        <div className="flex flex-col gap-y-2 px-4 py-2">
-                                            <div className="flex flex-col gap-y-1">
-                                                <div className="text-base font-medium">Report for Whom</div>
-                                                <div className="text-base text-gray-800 italic">{currentReport.report_for_whom.join(", ")}</div>
-                                            </div>
-                                            <div className="flex flex-col gap-y-1">
-                                                <div className="text-base font-medium">Reporting Reason</div>
-                                                <div className="text-base text-gray-800 italic">They are being {currentReport.report_reason.toLowerCase()}</div>
-                                            </div>
-                                            <div className="flex flex-col gap-y-1">
-                                                <div className="text-base font-medium">More Details</div>
-                                                <div className="text-sm text-gray-800 italic">{currentReport.report_details}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="report-message w-[55%] h-full flex flex-col gap-y-2 items-stretch">
-                                    <div class="header flex-grow-0 text-lg font-bold text-gray-700 ">Redacted Message Window</div>
-                                    <div className="flex-grow h-1">
-                                        <MessageWindow
-                                            messages={currentReport.messages}
-                                            reportedData={{
-                                                reportingUserId: currentReport.reporting_user_id,
-                                                reportedMessageId: currentReport.reported_message_id
-                                            }}
-                                            timeFormat="datetime"
-                                            enableCheckBox={false}
-                                            handleContentSelection={() => {}}
-                                            displayMessage={displayRedactedMessage}
-                                        />
-                                    </div>
-                                </div>
-                            </div>)
-                    }
-                    
-                </div>
-            </div>
-            <div className="bottom flex-grow-0">
-            </div>
-        </div>
-    );
+                    })}
+                </p>
+            );
+        }
+        
+        
+        return <p className="text-base">{redactedMessage}</p>;
+    };
 
-}
+    if(messageWindows.length > 0) {
+        // group messages by author into an array of arrays, where each array contains sequential messages from the same author
+
+        return (
+            <div className='flex flex-col items-center overflow-hidden w-[70%] h-full p-4 mx-auto gap-y-4'>
+                <div className="font-medium text-2xl">Reported Message Windows</div>
+                <MessageWindow
+                    messages={messageWindows[currentMessageWindow].messages}
+                    reportedData={{
+                        reportingUserId: reportedData.reportingUserId,
+                        reportedMessageId: reportedData.reportedMessageId
+                    }}
+                    timeFormat="datetime"
+                    enableCheckBox={false}
+                    enbaleExpandMore={false}
+                    handleContentSelection={() => {}}
+                    handleMessageSelection={() => {}}
+                    displayMessage={displayRedactedMessage}
+                    expandMessageWindow={() => {}}
+                />
+                <div className="flex justify-center items-center gap-x-2">
+                    <button 
+                        onClick={() => setCurrentMessageWindow(Math.max(currentMessageWindow - 1, 0))} 
+                        disabled={currentMessageWindow === 0} 
+                        className="py-1 px-2 rounded-full bg-blue-500 text-white disabled:bg-gray-300"
+                    >
+                        <FontAwesomeIcon icon={faArrowLeft} />
+                    </button>
+                    <div className='font-medium text-xl'>
+                        Message Window 
+                    </div>
+                    <button 
+                        onClick={() =>  setCurrentMessageWindow(Math.min(currentMessageWindow + 1, totalMessageWindows - 1))} 
+                        disabled={currentMessageWindow >= totalMessageWindows - 1} 
+                        className="py-1 px-2 rounded-full bg-blue-500 text-white disabled:bg-gray-300"
+                    >
+                         <FontAwesomeIcon icon={faArrowRight} />
+                    </button>
+                </div>
+                
+            </div>
+        );
+    } else if(errorMessage.length > 0) {
+        return (
+            <div class="bg-gray-100 flex justify-center items-center h-screen">
+                <div class="bg-white p-6 rounded-lg shadow-lg text-center">
+                    <h2 class="text-red-500 text-3xl font-bold mb-2">Error Occurred</h2>
+                    <p class="text-gray-700 text-xl">{errorMessage}</p>
+                </div>
+            </div>
+        );
+    }   
+};
+
 export default ReviewReports;
