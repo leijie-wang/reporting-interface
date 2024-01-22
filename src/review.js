@@ -28,7 +28,7 @@ const ReviewReports = (props) => {
             try {
                 // not sure why fetching data from the ngrok proxy does not work
                 const response = await fetch(
-                    `http://localhost:3000/react/review-report?token=${token}`,
+                    `${process.env.BACKEND_POINT}/react/review-report?token=${token}`,
                     {
                         method: 'GET',
                         mode: 'cors',

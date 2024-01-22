@@ -241,7 +241,7 @@ const RedactReports = (props) => {
         try {
                 // not sure why fetching data from the ngrok proxy does not work
             const response = await fetch(
-                `http://localhost:3000/react/expand-window?token=${token}&direction=${direction}&message_id=${message_id}`,
+                `${process.env.BACKEND_POINT}/react/expand-window?token=${token}&direction=${direction}&message_id=${message_id}`,
                 {
                     method: 'GET',
                     mode: 'cors',
@@ -293,7 +293,7 @@ const RedactReports = (props) => {
         );
 
         await fetch(
-            `http://localhost:3000/react/report-discord?token=${token}`,
+            `${process.env.BACKEND_POINT}/react/report-discord?token=${token}`,
             {
                 method: 'POST',
                 mode: 'cors',
