@@ -7,7 +7,7 @@ const convertTimestampToDate = (timeString) => {
     return  new Date(timeString).toLocaleDateString([], { year: 'numeric', month: '2-digit', day: '2-digit'});
 };
 
-
+const REACT_APP_BACKEND = "https://test.privacyreporting.com/api";
 const ModerateReports = (props) => {
     const [reports, setReports] = useState([]);
     const [currentReport, setCurrentReport] = useState(null);
@@ -15,13 +15,14 @@ const ModerateReports = (props) => {
     const [interactionOption, setInteractionOption] = useState(null);
     const [uncoverRedactedMessage, setUncoverRedactedMessage] = useState([]);
 
+
     useEffect(() => {
 
         const fetchData = async () => {
             try {
                 // not sure why fetching data from the ngrok proxy does not work
                 const response = await fetch(
-                    `${process.env.BACKEND_POINT}/react/review-reports`,
+                    `${REACT_APP_BACKEND}/react/review-reports`,
                     {
                         method: 'GET',
                         mode: 'cors',

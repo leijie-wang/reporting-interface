@@ -7,6 +7,7 @@ import {
     getRedactedMessage
 } from './utils';
 
+const REACT_APP_BACKEND = "https://test.privacyreporting.com/api";
 const RedactReports = (props) => {
     const [messages, setMessages] = useState([]);
     const [errorMessage, setErrorMessage] = useState(""); // error message to be displayed on the screen
@@ -194,7 +195,7 @@ const RedactReports = (props) => {
             try {
                 // not sure why fetching data from the ngrok proxy does not work
                 const response = await fetch(
-                    `http://localhost:3000/react/redact-reports?token=${token}`,
+                    `${REACT_APP_BACKEND}/react/redact-reports?token=${token}`,
                     {
                         method: 'GET',
                         mode: 'cors',
@@ -241,7 +242,7 @@ const RedactReports = (props) => {
         try {
                 // not sure why fetching data from the ngrok proxy does not work
             const response = await fetch(
-                `${process.env.BACKEND_POINT}/react/expand-window?token=${token}&direction=${direction}&message_id=${message_id}`,
+                `${REACT_APP_BACKEND}/react/expand-window?token=${token}&direction=${direction}&message_id=${message_id}`,
                 {
                     method: 'GET',
                     mode: 'cors',
@@ -293,7 +294,7 @@ const RedactReports = (props) => {
         );
 
         await fetch(
-            `${process.env.BACKEND_POINT}/react/report-discord?token=${token}`,
+            `${REACT_APP_BACKEND}/react/report-discord?token=${token}`,
             {
                 method: 'POST',
                 mode: 'cors',
@@ -313,7 +314,7 @@ const RedactReports = (props) => {
     if(messages.length > 0) {
         // group messages by author into an array of arrays, where each array contains sequential messages from the same author
         return (
-            <div className='flex flex-col overflow-hidden w-6/12 h-full p-2 mx-4 rounded-xl gap-y-4'>
+            <div className='flex flex-col overflow-hidden w-full md:w-6/12 h-full p-2 mx-4 rounded-xl gap-y-4'>
 
                 
                 <MessageWindow

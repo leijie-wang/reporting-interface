@@ -4,6 +4,7 @@ import MessageWindow from './components/messagewindow';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faArrowLeft, faArrowRight } from '@fortawesome/free-solid-svg-icons';
 
+const REACT_APP_BACKEND = "https://test.privacyreporting.com/api";
 const ReviewReports = (props) => {
     const [messageWindows, setMessageWindows] = useState([]);
     const [errorMessage, setErrorMessage] = useState(""); // error message to be displayed on the screen
@@ -28,14 +29,13 @@ const ReviewReports = (props) => {
             try {
                 // not sure why fetching data from the ngrok proxy does not work
                 const response = await fetch(
-                    `${process.env.BACKEND_POINT}/react/review-report?token=${token}`,
+                    `${REACT_APP_BACKEND}/react/review-report?token=${token}`,
                     {
                         method: 'GET',
                         mode: 'cors',
                         headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json, text/plain, */*',
-                            'Access-Control-Allow-Origin':'*'
                         },
                     }
                 );

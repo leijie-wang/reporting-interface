@@ -138,6 +138,7 @@ function MessageWindow(props) {
                                                             position: "first",
                                                         }}
                                                         onMouseUp={() => handleContentSelection(message.message_id)}
+                                                        onTouchEnd={() => handleContentSelection(message.message_id)}
                                                         avatarSpacer={index !== 0}
                                                     >
                                                         {index === 0 && (
