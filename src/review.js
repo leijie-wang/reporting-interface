@@ -5,6 +5,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faArrowLeft, faArrowRight } from '@fortawesome/free-solid-svg-icons';
 
 const REACT_APP_BACKEND = "https://test.privacyreporting.com/api";
+// const REACT_APP_BACKEND = "http://localhost:3000";
 const ReviewReports = (props) => {
     const [messageWindows, setMessageWindows] = useState([]);
     const [errorMessage, setErrorMessage] = useState(""); // error message to be displayed on the screen

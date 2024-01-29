@@ -8,6 +8,7 @@ import {
 } from './utils';
 
 const REACT_APP_BACKEND = "https://test.privacyreporting.com/api";
+// const REACT_APP_BACKEND = "http://localhost:3000";
 const RedactReports = (props) => {
     const [messages, setMessages] = useState([]);
     const [errorMessage, setErrorMessage] = useState(""); // error message to be displayed on the screen

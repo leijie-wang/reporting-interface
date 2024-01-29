@@ -1,5 +1,6 @@
 import React, {useState, useEffect, useRef} from 'react';
 import Checkbox from './checkbox';
+import ExpandButton from './expandbutton';
 import styles from "@chatscope/chat-ui-kit-styles/dist/default/styles.min.css";
 import '../index.css';
 import {
@@ -84,11 +85,7 @@ function MessageWindow(props) {
             <MessageList>
                 {enbaleExpandMore && 
                     (<MessageSeparator>
-                        < button onClick={() => expandMessageWindow("before")} 
-                            className='bg-blue-50 py-1 px-2 rounded'
-                            >
-                            Expand More
-                        </button>
+                        <ExpandButton onExpand={() => expandMessageWindow("before")} />
                     </MessageSeparator>)
                 }
                 {
@@ -170,11 +167,7 @@ function MessageWindow(props) {
                 }
                 {enbaleExpandMore && (
                     <MessageSeparator>
-                        < button onClick={() => expandMessageWindow("after")} 
-                            className='bg-blue-50 py-1 px-2 rounded'
-                            >
-                            Expand More
-                        </button>
+                        <ExpandButton onExpand={() => expandMessageWindow("after")} />
                     </MessageSeparator>
                 )}
             </MessageList>
